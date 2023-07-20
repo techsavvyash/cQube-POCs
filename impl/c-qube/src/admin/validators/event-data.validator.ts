@@ -68,16 +68,17 @@ export class EventDataValidator {
   private matchDataTypes(contentData: string[], grammarDataTypes: string) {
     const errors: ValidationErrors[] = [];
     const dataTypes: string[] = grammarDataTypes.split(',');
+    const numCols = dataTypes.length;
 
     for (let i = 0; i < contentData.length; i++) {
       const currentRow = contentData[i].split(',');
+      const len = currentRow.length;
       if (currentRow.length !== dataTypes.length) {
         errors.push({
           row: i + 1 + '',
           col: '0',
           errorCode: 2003,
-          error: `Mismatch number of columns in row: ${i + 1}, expected ${dataTypes.length
-            } got ${currentRow.length}`,
+          error: `Expected ${numCols} columns at row ${i + 1} got ${len}`,
         });
 
         continue;

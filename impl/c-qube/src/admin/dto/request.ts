@@ -5,10 +5,6 @@ export enum FileType {
   EventData = 'event-data',
 }
 
-export class SingleFileValidateRequest {
+export class FileValidateRequest {
   type: FileType;
-  content: {
-    grammarContent: string;
-    dataContent: string;
-  };
 }
