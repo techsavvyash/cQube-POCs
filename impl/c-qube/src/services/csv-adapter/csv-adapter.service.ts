@@ -91,6 +91,7 @@ export class CsvAdapterService {
     const dimensions: DimensionGrammar[] = [];
     const dimensionGrammarFolder = config?.dimensions.input?.files;
     const regexDimensionGrammar = /\-dimension\.grammar.csv$/i;
+    // TODO: try to break this into functions so that we can use this at multiple places inside code
     const inputFilesForDimensions = readdirSync(dimensionGrammarFolder);
     for (let i = 0; i < inputFilesForDimensions?.length; i++) {
       // Create a function to get all files in the folder
