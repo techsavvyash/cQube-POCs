@@ -84,8 +84,8 @@ export class AdminService {
       return stat.isFile()
         ? 'file'
         : stat.isDirectory()
-        ? 'directory'
-        : 'unknown';
+          ? 'directory'
+          : 'unknown';
     }
     function getFilesWithTypes(directoryPath) {
       const files = fs.readdirSync(directoryPath);
@@ -100,7 +100,7 @@ export class AdminService {
       return filesWithTypes;
     }
 
-    const filesWithTypes = getFilesWithTypes('./mount/update');
+    const filesWithTypes = getFilesWithTypes('./mount');
     if (filesWithTypes['config.json'] !== 'file')
       throw new BadRequestException('config.json is required in zip');
     if (filesWithTypes['dimensions'] !== 'directory')
@@ -108,18 +108,17 @@ export class AdminService {
     if (filesWithTypes['programs'] !== 'directory')
       throw new BadRequestException('config.json is required required in zip');
 
-    const config = JSON.parse(
-      fs.readFileSync('./mount/update/config.json', 'utf-8'),
-    );
+    const config = JSON.parse(fs.readFileSync('./mount/config.json', 'utf-8'));
 
-    errors.dimensions = this.handleDimensionFolderValidation(
-      './mount/update/dimensions',
-    );
+    errors.dimensions =
+      this.handleDimensionFolderValidation('./mount/dimensions');
 
-    errors.programs = this.handleProgramsFolderValidation(config);
+    const programValidationResponse =
+      this.handleProgramsFolderValidation(config);
+    errors.programs = programValidationResponse.errors;
 
     fs.rmdirSync('mount', { recursive: true });
-    return errors;
+    return { errors, warnings: programValidationResponse.warnings };
   }
 
   handleDimensionFolderValidation(folderPath: string) {
@@ -161,7 +160,7 @@ export class AdminService {
         } else {
           const dataContent = fs.readFileSync(dimensionDataFileName, 'utf-8');
           dataErrors.push(
-            this.checkDimensionDataForValidationErrors(
+            ...this.checkDimensionDataForValidationErrors(
               grammarContent,
               dataContent,
             ).errors,
@@ -183,23 +182,28 @@ export class AdminService {
 
   handleProgramsFolderValidation(config) {
     const regexEventGrammar = /\-event\.grammar.csv$/i;
-    const errors = {
-      grammar: {},
-      data: {},
-    };
+    const errors = {};
+    const warnings = [];
 
     console.log('config: ', config);
 
     for (let i = 0; i < config?.programs.length; i++) {
+      const programName = config?.programs[i]?.name;
+      const programErrors = {
+        grammar: {},
+        data: {},
+      };
+
       const inputFiles = fs.readdirSync(config?.programs[i].input?.files);
-      const grammarErrors = [];
-      const dataErrors = [];
+      // iterating over all the files in the program folder
       for (let j = 0; j < inputFiles.length; j++) {
+        const grammarErrors = [];
+        const dataErrors = [];
         if (regexEventGrammar.test(inputFiles[j])) {
-          const currentEventGrammarFileName =
+          const currentEventGrammarFilePath =
             config?.programs[i].input?.files + `/${inputFiles[j]}`;
           const eventGrammarContent = fs.readFileSync(
-            currentEventGrammarFileName,
+            currentEventGrammarFilePath,
             'utf-8',
           );
 
@@ -208,19 +212,21 @@ export class AdminService {
               .errors,
           );
 
-          errors.grammar[inputFiles[j]] = {
-            eventGrammarContent,
-            grammarErrors,
-          };
+          // programErrors.grammar[inputFiles[j]] = {
+          // eventGrammarContent,
+          //   grammarErrors,
+          // };
 
-          const dataFilePath = currentEventGrammarFileName.replace(
+          programErrors.grammar[inputFiles[j]] = grammarErrors;
+
+          const dataFilePath = currentEventGrammarFilePath.replace(
             'grammar',
             'data',
           );
 
           if (!fs.existsSync(dataFilePath)) {
-            dataErrors.push(
-              `Warning: Data file missing for dimension grammar ${currentEventGrammarFileName}`,
+            warnings.push(
+              `Warning: Data file missing for dimension grammar ${currentEventGrammarFilePath}`,
             );
           } else {
             const eventContent = fs.readFileSync(dataFilePath, 'utf-8');
@@ -230,15 +236,19 @@ export class AdminService {
                 eventContent,
               ).errors,
             );
-            errors.data[inputFiles[j].replace('grammar', 'data')] = {
-              eventDataContent: eventContent,
-              dataErrors,
-            };
+            // programErrors.data[inputFiles[j].replace('grammar', 'data')] = {
+            //   eventDataContent: eventContent,
+            //   dataErrors,
+            // };
+            programErrors.data[inputFiles[j].replace('grammar', 'data')] =
+              dataErrors;
           }
         }
       }
+
+      errors[programName] = programErrors;
     }
 
-    return errors;
+    return { errors, warnings };
   }
 }
