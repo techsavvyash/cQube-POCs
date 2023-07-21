@@ -4,7 +4,7 @@ export class EventGrammarValidator {
   constructor(grammarContent: string) {
     this.content = grammarContent
       .split('\n')
-      .filter((line) => line.trim() !== '');
+      .filter((line) => line.trim() !== '').map((line) => line.trim());
   }
 
   verify() {
