@@ -154,23 +154,24 @@ export class AdminService {
           currentDimensionGrammarFileName,
           'utf-8',
         );
-        if (!fs.existsSync(dimensionDataFileName))
-          throw new BadRequestException(
-            `Data file missing for dimension grammar ${currentDimensionGrammarFileName}`,
+        if (!fs.existsSync(dimensionDataFileName)) {
+          dataErrors.push(
+            `Warning: Data file missing for dimension grammar ${currentDimensionGrammarFileName}`,
           );
-        const dataContent = fs.readFileSync(dimensionDataFileName, 'utf-8');
-
+        } else {
+          const dataContent = fs.readFileSync(dimensionDataFileName, 'utf-8');
+          dataErrors.push(
+            this.checkDimensionDataForValidationErrors(
+              grammarContent,
+              dataContent,
+            ).errors,
+          );
+        }
         grammarErrors.push(
           ...this.checkDimensionGrammarForValidationErrors(grammarContent)
             .errors,
         );
 
-        dataErrors.push(
-          this.checkDimensionDataForValidationErrors(
-            grammarContent,
-            dataContent,
-          ).errors,
-        );
         errors.grammar[inputFilesForDimensions[i]] = grammarErrors;
         errors.data[inputFilesForDimensions[i].replace('grammar', 'data')] =
           dataErrors;
@@ -201,29 +202,39 @@ export class AdminService {
             currentEventGrammarFileName,
             'utf-8',
           );
-          const dataFilePath = currentEventGrammarFileName.replace(
-            'grammar',
-            'data',
-          );
-          const eventContent = fs.readFileSync(dataFilePath, 'utf-8');
+
           grammarErrors.push(
             ...this.checkEventGrammarForValidationErrors(eventGrammarContent)
               .errors,
           );
-          dataErrors.push(
-            ...this.checkEventDataForValidationErrors(
-              eventGrammarContent,
-              eventContent,
-            ).errors,
-          );
+
           errors.grammar[inputFiles[j]] = {
             eventGrammarContent,
             grammarErrors,
           };
-          errors.data[inputFiles[j].replace('grammar', 'data')] = {
-            eventDataContent: eventContent,
-            dataErrors,
-          };
+
+          const dataFilePath = currentEventGrammarFileName.replace(
+            'grammar',
+            'data',
+          );
+
+          if (!fs.existsSync(dataFilePath)) {
+            dataErrors.push(
+              `Warning: Data file missing for dimension grammar ${currentEventGrammarFileName}`,
+            );
+          } else {
+            const eventContent = fs.readFileSync(dataFilePath, 'utf-8');
+            dataErrors.push(
+              ...this.checkEventDataForValidationErrors(
+                eventGrammarContent,
+                eventContent,
+              ).errors,
+            );
+            errors.data[inputFiles[j].replace('grammar', 'data')] = {
+              eventDataContent: eventContent,
+              dataErrors,
+            };
+          }
         }
       }
     }
