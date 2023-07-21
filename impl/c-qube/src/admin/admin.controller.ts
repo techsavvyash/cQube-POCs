@@ -123,11 +123,11 @@ export class AdminController {
       storage: defaultStorageConfig,
     }),
   )
-  uploadBulkZip(@UploadedFile() file: Express.Multer.File) {
+  async uploadBulkZip(@UploadedFile() file: Express.Multer.File) {
     // console.log(file);
     const zipFilePath = file.path;
 
-    const resp = this.adminService.handleZipFile(zipFilePath);
+    const resp = await this.adminService.handleZipFile(zipFilePath);
     // delet the file
     if (zipFilePath) fs.unlinkSync(zipFilePath);
     return resp;

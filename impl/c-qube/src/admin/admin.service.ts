@@ -67,7 +67,7 @@ export class AdminService {
     };
   }
 
-  handleZipFile(zipFilePath: string) {
+  async handleZipFile(zipFilePath: string) {
     // unzip the file first
     const errors = {
       dimensions: {},
@@ -75,28 +75,16 @@ export class AdminService {
     };
 
     // TODO: validate zips folder structure
-
     if (fs.existsSync('mount')) fs.rmdirSync('mount', { recursive: true });
     fs.mkdirSync('mount');
+    const files = await decompress(zipFilePath, 'mount');
+    const config = JSON.parse(files[1].data);
 
-    decompress(zipFilePath, 'mount').then((files) => {
-      // console.log('files: ', files);
-      this.logger.verbose('Unzipped files: ');
+    errors.dimensions = this.handleDimensionFolderValidation(
+      './mount/update/dimensions',
+    );
 
-      const config = JSON.parse(
-        fs.readFileSync('./mount/update/config.json', 'utf-8'),
-      );
-
-      errors.dimensions = this.handleDimensionFolderValidation(
-        './mount/update/dimensions',
-      );
-
-      errors.programs = this.handleProgramsFolderValidation(config);
-
-      // TODO: Add support for checking events
-      fs.rmdirSync('mount', { recursive: true });
-    });
-
+    errors.programs = this.handleProgramsFolderValidation(config);
     return errors;
   }
 
@@ -167,10 +155,10 @@ export class AdminService {
       const inputFiles = fs.readdirSync(config?.programs[i].input?.files);
       const grammarErrors = [];
       const dataErrors = [];
-      for (let i = 0; i < inputFiles.length; i++) {
-        if (regexEventGrammar.test(inputFiles[i])) {
+      for (let j = 0; j < inputFiles.length; j++) {
+        if (regexEventGrammar.test(inputFiles[j])) {
           const currentEventGrammarFileName =
-            config?.programs[i].input?.files + `/${inputFiles[i]}`;
+            config?.programs[i].input?.files + `/${inputFiles[j]}`;
           const eventGrammarContent = fs.readFileSync(
             currentEventGrammarFileName,
             'utf-8',
@@ -190,8 +178,14 @@ export class AdminService {
               eventContent,
             ).errors,
           );
-          errors.grammar[inputFiles[i]] = grammarErrors;
-          errors.data[inputFiles[i].replace('grammar', 'data')] = dataErrors;
+          errors.grammar[inputFiles[j]] = {
+            eventGrammarContent,
+            grammarErrors,
+          };
+          errors.data[inputFiles[j].replace('grammar', 'data')] = {
+            eventDataContent: eventContent,
+            dataErrors,
+          };
         }
       }
     }
