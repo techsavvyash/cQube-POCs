@@ -73,7 +73,8 @@ export class AdminController {
       throw new BadRequestException('Grammar file is required');
 
     const grammarContent = fs.readFileSync(grammarFilePath, 'utf8');
-    const dataFilePath = files.data[0].path;
+    const dataFilePath = files?.data ? files?.data[0]?.path : undefined;
+
     let resp;
     switch (body.type.trim()) {
       case FileType.DimensionGrammar:
