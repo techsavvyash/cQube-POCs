@@ -1,8 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { DimensionDataValidator } from '../../../../dx/cqube-spec-checker/dimension.data.validator';
 import { DimensionValidator } from '../../../../dx/cqube-spec-checker/dimension.grammar.validator';
-import { ValidationError } from './admin.errors';
 import * as fs from 'fs';
+import * as path from 'path';
 import { EventGrammarValidator } from './validators/event-grammar.validator';
 import { SingleFileValidationResponse } from './dto/response';
 import { EventDataValidator } from './validators/event-data.validator';
@@ -67,7 +67,7 @@ export class AdminService {
     };
   }
 
-  handleZipFile(zipFilePath: string) {
+  async handleZipFile(zipFilePath: string) {
     // unzip the file first
     const errors = {
       dimensions: {},
@@ -75,28 +75,50 @@ export class AdminService {
     };
 
     // TODO: validate zips folder structure
-
     if (fs.existsSync('mount')) fs.rmdirSync('mount', { recursive: true });
     fs.mkdirSync('mount');
+    await decompress(zipFilePath, 'mount');
 
-    decompress(zipFilePath, 'mount').then((files) => {
-      // console.log('files: ', files);
-      this.logger.verbose('Unzipped files: ');
+    function getFileType(filePath) {
+      const stat = fs.statSync(filePath);
+      return stat.isFile()
+        ? 'file'
+        : stat.isDirectory()
+        ? 'directory'
+        : 'unknown';
+    }
+    function getFilesWithTypes(directoryPath) {
+      const files = fs.readdirSync(directoryPath);
 
-      const config = JSON.parse(
-        fs.readFileSync('./mount/update/config.json', 'utf-8'),
-      );
+      const filesWithTypes = {};
+      files.forEach((file) => {
+        const filePath = path.join(directoryPath, file);
+        const fileType = getFileType(filePath);
+        filesWithTypes[file] = fileType;
+      });
 
-      errors.dimensions = this.handleDimensionFolderValidation(
-        './mount/update/dimensions',
-      );
+      return filesWithTypes;
+    }
 
-      errors.programs = this.handleProgramsFolderValidation(config);
+    const filesWithTypes = getFilesWithTypes('./mount/update');
+    if (filesWithTypes['config.json'] !== 'file')
+      throw new BadRequestException('config.json is required in zip');
+    if (filesWithTypes['dimensions'] !== 'directory')
+      throw new BadRequestException('config.json is required required in zip');
+    if (filesWithTypes['programs'] !== 'directory')
+      throw new BadRequestException('config.json is required required in zip');
 
-      // TODO: Add support for checking events
-      fs.rmdirSync('mount', { recursive: true });
-    });
+    const config = JSON.parse(
+      fs.readFileSync('./mount/update/config.json', 'utf-8'),
+    );
 
+    errors.dimensions = this.handleDimensionFolderValidation(
+      './mount/update/dimensions',
+    );
+
+    errors.programs = this.handleProgramsFolderValidation(config);
+
+    fs.rmdirSync('mount', { recursive: true });
     return errors;
   }
 
@@ -132,19 +154,24 @@ export class AdminService {
           currentDimensionGrammarFileName,
           'utf-8',
         );
-        const dataContent = fs.readFileSync(dimensionDataFileName, 'utf-8');
-
+        if (!fs.existsSync(dimensionDataFileName)) {
+          dataErrors.push(
+            `Warning: Data file missing for dimension grammar ${currentDimensionGrammarFileName}`,
+          );
+        } else {
+          const dataContent = fs.readFileSync(dimensionDataFileName, 'utf-8');
+          dataErrors.push(
+            this.checkDimensionDataForValidationErrors(
+              grammarContent,
+              dataContent,
+            ).errors,
+          );
+        }
         grammarErrors.push(
           ...this.checkDimensionGrammarForValidationErrors(grammarContent)
             .errors,
         );
 
-        dataErrors.push(
-          this.checkDimensionDataForValidationErrors(
-            grammarContent,
-            dataContent,
-          ).errors,
-        );
         errors.grammar[inputFilesForDimensions[i]] = grammarErrors;
         errors.data[inputFilesForDimensions[i].replace('grammar', 'data')] =
           dataErrors;
@@ -167,31 +194,47 @@ export class AdminService {
       const inputFiles = fs.readdirSync(config?.programs[i].input?.files);
       const grammarErrors = [];
       const dataErrors = [];
-      for (let i = 0; i < inputFiles.length; i++) {
-        if (regexEventGrammar.test(inputFiles[i])) {
+      for (let j = 0; j < inputFiles.length; j++) {
+        if (regexEventGrammar.test(inputFiles[j])) {
           const currentEventGrammarFileName =
-            config?.programs[i].input?.files + `/${inputFiles[i]}`;
+            config?.programs[i].input?.files + `/${inputFiles[j]}`;
           const eventGrammarContent = fs.readFileSync(
             currentEventGrammarFileName,
             'utf-8',
           );
-          const dataFilePath = currentEventGrammarFileName.replace(
-            'grammar',
-            'data',
-          );
-          const eventContent = fs.readFileSync(dataFilePath, 'utf-8');
+
           grammarErrors.push(
             ...this.checkEventGrammarForValidationErrors(eventGrammarContent)
               .errors,
           );
-          dataErrors.push(
-            ...this.checkEventDataForValidationErrors(
-              eventGrammarContent,
-              eventContent,
-            ).errors,
+
+          errors.grammar[inputFiles[j]] = {
+            eventGrammarContent,
+            grammarErrors,
+          };
+
+          const dataFilePath = currentEventGrammarFileName.replace(
+            'grammar',
+            'data',
           );
-          errors.grammar[inputFiles[i]] = grammarErrors;
-          errors.data[inputFiles[i].replace('grammar', 'data')] = dataErrors;
+
+          if (!fs.existsSync(dataFilePath)) {
+            dataErrors.push(
+              `Warning: Data file missing for dimension grammar ${currentEventGrammarFileName}`,
+            );
+          } else {
+            const eventContent = fs.readFileSync(dataFilePath, 'utf-8');
+            dataErrors.push(
+              ...this.checkEventDataForValidationErrors(
+                eventGrammarContent,
+                eventContent,
+              ).errors,
+            );
+            errors.data[inputFiles[j].replace('grammar', 'data')] = {
+              eventDataContent: eventContent,
+              dataErrors,
+            };
+          }
         }
       }
     }
