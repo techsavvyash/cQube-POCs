@@ -117,6 +117,8 @@ export class AdminService {
     );
 
     errors.programs = this.handleProgramsFolderValidation(config);
+
+    fs.rmdirSync('mount', { recursive: true });
     return errors;
   }
 
