@@ -1,8 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { DimensionDataValidator } from '../../../../dx/cqube-spec-checker/dimension.data.validator';
 import { DimensionValidator } from '../../../../dx/cqube-spec-checker/dimension.grammar.validator';
-import { ValidationError } from './admin.errors';
 import * as fs from 'fs';
+import * as path from 'path';
 import { EventGrammarValidator } from './validators/event-grammar.validator';
 import { SingleFileValidationResponse } from './dto/response';
 import { EventDataValidator } from './validators/event-data.validator';
@@ -77,8 +77,40 @@ export class AdminService {
     // TODO: validate zips folder structure
     if (fs.existsSync('mount')) fs.rmdirSync('mount', { recursive: true });
     fs.mkdirSync('mount');
-    const files = await decompress(zipFilePath, 'mount');
-    const config = JSON.parse(files[1].data);
+    await decompress(zipFilePath, 'mount');
+
+    function getFileType(filePath) {
+      const stat = fs.statSync(filePath);
+      return stat.isFile()
+        ? 'file'
+        : stat.isDirectory()
+        ? 'directory'
+        : 'unknown';
+    }
+    function getFilesWithTypes(directoryPath) {
+      const files = fs.readdirSync(directoryPath);
+
+      const filesWithTypes = {};
+      files.forEach((file) => {
+        const filePath = path.join(directoryPath, file);
+        const fileType = getFileType(filePath);
+        filesWithTypes[file] = fileType;
+      });
+
+      return filesWithTypes;
+    }
+
+    const filesWithTypes = getFilesWithTypes('./mount/update');
+    if (filesWithTypes['config.json'] !== 'file')
+      throw new BadRequestException('config.json is required in zip');
+    if (filesWithTypes['dimensions'] !== 'directory')
+      throw new BadRequestException('config.json is required required in zip');
+    if (filesWithTypes['programs'] !== 'directory')
+      throw new BadRequestException('config.json is required required in zip');
+
+    const config = JSON.parse(
+      fs.readFileSync('./mount/update/config.json', 'utf-8'),
+    );
 
     errors.dimensions = this.handleDimensionFolderValidation(
       './mount/update/dimensions',
@@ -120,6 +152,10 @@ export class AdminService {
           currentDimensionGrammarFileName,
           'utf-8',
         );
+        if (!fs.existsSync(dimensionDataFileName))
+          throw new BadRequestException(
+            `Data file missing for dimension grammar ${currentDimensionGrammarFileName}`,
+          );
         const dataContent = fs.readFileSync(dimensionDataFileName, 'utf-8');
 
         grammarErrors.push(
