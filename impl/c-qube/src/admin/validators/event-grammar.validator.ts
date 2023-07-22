@@ -41,16 +41,25 @@ export class EventGrammarValidator {
 
     // Check for supported data types
     const dataTypeRow = this.content[2];
-    dataTypeRow.split(',').forEach((dataType: string) => {
+    // const dataTypeErrors = [];
+
+    dataTypeRow.split(',').forEach((dataType: string, index: number) => {
       if (!['string', 'integer', 'date'].includes(dataType.trim())) {
         errors.push({
           row: 3,
-          col: 0,
+          col: index,
           errorCode: 1002,
           error: `Invalid data type: ${dataType}`,
         });
       }
     });
+
+    // errors.push({
+    //   row: 3,
+    //   col: 0,
+    //   errorCode: 1002,
+    //   error: dataTypeErrors,
+    // });
     // TODO: Add check to ensure the mentioned data type matches the dimension's datatype
 
     // check that last row only contains dimensions, timeDimensions and metric
