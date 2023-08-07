@@ -100,6 +100,27 @@ async function bootstrap() {
         process.exit(0);
       },
     )
+    .command(
+      'cdc',
+      'Process CDC files',
+      (yargs) => {
+        yargs.option('mockMinioFolder', {
+          alias: 'm',
+          type: 'string',
+          default: 'none',
+          describe: 'Mock minio folder to process',
+        });
+      },
+      async (argv) => {
+        process.env['DEBUG'] = argv.debug.toString();
+        await csvAdapterService.processMinioCDCUpdates(
+          argv.mockMinioFolder as string,
+        );
+        outro(`You're all set!`);
+        await application.close();
+        process.exit(0);
+      },
+    )
     .demandCommand(1, 'Please provide a valid command')
     .help()
     .version()

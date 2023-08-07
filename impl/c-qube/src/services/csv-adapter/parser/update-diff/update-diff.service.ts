@@ -95,10 +95,11 @@ export class DifferenceGeneratorService {
     }
   }
 
+  // TODO: Remove header and read from grammar file
   async combineDeltaFiles(
     folderPath: string,
-    header: string,
-    ingestFolderPath: string,
+    header?: string,
+    ingestFolderPath?: string,
     grammarFilePath?: string,
   ) {
     const deltaFileNameRegex = /\-event\.data\.\d+\.csv$/i;
@@ -108,6 +109,22 @@ export class DifferenceGeneratorService {
     const checkedFiles = [];
     let dataFileName: string;
     let checkPointData: string[];
+
+    if (!grammarFilePath) {
+      grammarFilePath =
+        ingestFolderPath +
+        '/' +
+        fs
+          .readdirSync(ingestFolderPath)
+          .filter((filename: string) => filename.includes('grammar'))[0];
+    }
+    if (!header) {
+      header = fs
+        .readFileSync(`${grammarFilePath}`, 'utf-8')
+        .split('\n')
+        .map((row: string) => row.trim())
+        .filter((row: string) => row !== '')[3];
+    }
 
     if (checkPointExists) {
       checkPointData = fs.readFileSync(checklistFilePath, 'utf-8').split('\n');
@@ -148,7 +165,8 @@ export class DifferenceGeneratorService {
     }
 
     if (!filenames || !filenames.length) {
-      throw new Error('No updates found');
+      console.log('No updates found');
+      return false;
     }
 
     // we are assuming that each row of csv has unique combination of dimensions and timeDimensions
@@ -223,7 +241,7 @@ export class DifferenceGeneratorService {
     // update the table snapshot in this minio table for future comparrisons since we are only storing delta in the ingest table (UP-DOWN counter file)
     const folderDataFilePath =
       folderPath + '/' + filenames[0].split('.')[0].concat('.data.csv');
-    await fs.rename(updateFilePath, folderDataFilePath, (err) => {
+    fs.renameSync(updateFilePath, folderDataFilePath, (err) => {
       if (err) {
         console.error('Error renaming the file:', err);
       } else {

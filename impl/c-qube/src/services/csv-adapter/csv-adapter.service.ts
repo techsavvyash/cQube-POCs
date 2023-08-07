@@ -37,7 +37,9 @@ import {
 } from './parser/dataset/dataset-grammar.service';
 import { EventGrammarCSVFormat } from './types/parser';
 import { DimensionGrammarService } from './parser/dimension-grammar/dimension-grammar.service';
-import path from 'path';
+import * as fss from 'fs';
+import * as path from 'path';
+import { DifferenceGeneratorService } from './parser/update-diff/update-diff.service';
 const chalk = require('chalk');
 const fs = require('fs').promises;
 const pl = require('nodejs-polars');
@@ -54,6 +56,7 @@ export class CsvAdapterService {
     public datasetService: DatasetService,
     public prisma: PrismaService,
     public dimensionGrammarService: DimensionGrammarService,
+    public differenceGeneratorService: DifferenceGeneratorService,
   ) {}
 
   public async ingest(
@@ -649,23 +652,23 @@ export class CsvAdapterService {
   }
 
   public async processMinioCDCUpdates(minioFolderPath: string) {
-    let directories = [];
+    if (!fss.existsSync(minioFolderPath)) {
+      console.error('Minio folder does not exist');
+      return;
+    }
 
-    fs.readdir(minioFolderPath, (err, files) => {
-      if (err) {
-        console.error('Error reading directory:', err);
-        return;
+    const directories = fss.readdirSync(minioFolderPath);
+    for (const directory of directories) {
+      const programs = fss.readdirSync(path.join(minioFolderPath, directory));
+      for (const program of programs) {
+        const res = await this.differenceGeneratorService.combineDeltaFiles(
+          path.join(minioFolderPath, directory, program),
+          null,
+          `./ingest/programs/${program}`,
+        );
+        if(res)
+          await this.ingestData({});
       }
-      // make this recursive
-      // Filter the list to include only directories
-      directories = files.filter((file) => {
-        const filePath = path.join(minioFolderPath, file);
-        return fs.statSync(filePath).isDirectory();
-      });
-    });
-
-
-    const dateRegex = /a/;
-
+    }
   }
 }
